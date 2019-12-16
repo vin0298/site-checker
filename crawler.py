@@ -145,7 +145,7 @@ class ExternalLinkScraper:
 		try:
 			with open("non_target_external.txt", "w+") as file:
 				for parent_link in list(self.non_target_external_links):
-					header = "External links linked from: " + parent_link + "\n"
+					header = "<p>External links linked from: " + parent_link + "\n"
 					file.write(header)
 					for link in self.non_target_external_links[parent_link]:
 						content = "------> " + link + "\n"
@@ -154,6 +154,12 @@ class ExternalLinkScraper:
 				print("Finished writing non_target_external_links")
 		except Exception as e:
 			print("An exception has occured: \n %s" % e)
+
+	def reprocess_broken_links(self):
+		for broken_link in self.broken_links:
+			self.processed_urls.remove(broken_link)
+			self.urls_to_crawl.put(broken_link)
+		self.broken_links = set([])
 
 	# Retry broken links
 	def run_crawler(self):
@@ -167,6 +173,11 @@ class ExternalLinkScraper:
 					job.add_done_callback(self.post_scrape_callback)
 			except Empty:
 				print("Ran out of links to crawl!")
+				response = input('\n-------->Retry broken links?: y/n  <------------\n')
+				if response.lower() == 'y':
+					# Remove broken_links from processed_urls
+					self.pool.submit(self.reprocess_broken_links)
+					continue
 				self.pool.submit(self.print_all_external_links)
 				self.pool.submit(self.print_all_broken_links)
 				self.pool.submit(self.write_all_non_target_external_links)
