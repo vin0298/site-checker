@@ -46,6 +46,11 @@ class ExternalLinkScraper:
 			print("Could not retrieve robots.txt file. Please supply the base URL")
 			exit()
 
+	def simplify_url(self, url):
+		url = url.replace("www.", "")
+		url = url.replace("https://", "http://")
+		return url
+
 	# Replace wwww
 	def parse_links(self, html, parent_url):
 		soup = BeautifulSoup(html, "html.parser")
@@ -53,38 +58,36 @@ class ExternalLinkScraper:
 		for link in links:
 			url = link['href']
 			if not self.robot_txt_helper.can_fetch('*', url): continue
-			if url.startswith('tel'): continue
-			formatted_url = url.replace("www.", "")
-			formatted_url = formatted_url.replace("https://", "http://")
+			if url.startswith('tel:') or url.startswith('mailto:'): continue
+			formatted_url = self.simplify_url(url)
 			if url.startswith('/') or url.startswith('#') or url.startswith('?') or formatted_url.startswith(self.root_url):
-				url = urljoin(self.root_url, url)
-				if url not in self.processed_urls:
-					self.urls_to_crawl.put(url)
-			elif self.check_if_url_is_target(url):
+				formatted_url = urljoin(self.root_url, formatted_url)
+				if formatted_url not in self.processed_urls:
+					self.urls_to_crawl.put(formatted_url)
+			elif self.check_if_url_is_target(formatted_url):
 				print("External URL detected: %s" % url)
 				print("Found from parent: %s" % parent_url)
 				self.external_urls.setdefault(parent_url, set([])).add(url)
 			else:
-				print("Non-target external URL detected: %s" % url)
-				print("Found from parent: %s" % parent_url)
 				self.non_target_external_links.setdefault(parent_url, set([])).add(url)
 
 	def parse_image_links(self, html, parent_url):
 		soup = BeautifulSoup(html, "html.parser")
 		img_links = soup.find_all("img")
 		for img_link in img_links:
-			img_url = img_link['src']
-			if not self.robot_txt_helper.can_fetch('*', img_url): continue
-			if img_url.startswith('/') or img_url.startswith(self.root_url):
-				img_url = urljoin(self.root_url, img_url)
-				if img_url not in self.processed_urls:
-					self.processed_urls.add(img_url)
-			elif self.check_if_url_is_target(img_url):
+			img_url = img_link.get('src')
+			if img_url is None: continue
+
+			formatted_url = self.simplify_url(img_url)
+			if not self.robot_txt_helper.can_fetch('*', formatted_url): continue
+			if img_url in self.processed_urls: continue
+			if self.check_if_url_is_target(formatted_url):
 				print("External img URL detected: %s" % img_url)
 				print("Found from parent: %s" % parent_url)
 				self.external_urls.setdefault(parent_url, set([])).add(img_url)
-			else:
+			elif not formatted_url.startswith(self.root_url):
 				self.non_target_external_links.setdefault(parent_url, set([])).add(img_url)
+			self.processed_urls.add(img_url)
 
 	def post_scrape_callback(self, res):
 		result = res.result()
@@ -141,10 +144,10 @@ class ExternalLinkScraper:
 		print("Writing all non-target external URLs found to a file named: non_target_external.txt")
 		try:
 			with open("non_target_external.txt", "w+") as file:
-				for parent_link, links in self.non_target_external_links.items():
-					header = "Non-target external links linked from: " + parent_link + "\n"
+				for parent_link in list(self.non_target_external_links):
+					header = "External links linked from: " + parent_link + "\n"
 					file.write(header)
-					for link in links:
+					for link in self.non_target_external_links[parent_link]:
 						content = "------> " + link + "\n"
 						print(content)
 						file.write(content)
@@ -152,6 +155,7 @@ class ExternalLinkScraper:
 		except Exception as e:
 			print("An exception has occured: \n %s" % e)
 
+	# Retry broken links
 	def run_crawler(self):
 		while True:
 			try:
