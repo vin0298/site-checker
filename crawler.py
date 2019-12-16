@@ -120,10 +120,13 @@ class ExternalLinkScraper:
 		try:
 			with open(filename, "w+") as file:
 				for parent_link, links in self.external_urls.items():
-					header = "<p><strong>>External links linked from: " + parent_link + "</strong></p>\n"
+					href_tag = '<a href="' + parent_link + '">' + parent_link + '</a>'
+					header = '<p><strong>External links linked from: ' + href_tag + '</strong></p>\n'
+					# header = "<p><strong>>External links linked from: " + parent_link + "</strong></p>\n"
 					file.write(header)
 					for link in links:
-						content = "<p>------> " + link + "</p>\n"
+						link_tag = '<a href="' + link + '">' + link + '</a>'
+						content = "<p>------> " + link_tag + "</p>\n"
 						print(content)
 						file.write(content)
 				print("Finished writing the external_links")
@@ -137,7 +140,8 @@ class ExternalLinkScraper:
 		try:
 			with open(filename, "w+") as file:
 				for link in self.broken_links:
-					file.write("<p>" + link + "</p>\n")
+					link_tag = '<a href="' + link + '">' + link + '</a>'
+					file.write("<p>" + link_tag + "</p>\n")
 			print("Finished writing the broken_links")
 		except Exception as e:
 			print("An exception has occured: \n %s" % e)
@@ -148,10 +152,12 @@ class ExternalLinkScraper:
 		try:
 			with open(filename, "w+") as file:
 				for parent_link in list(self.non_target_external_links):
-					header = "<p><strong>External links linked from: " + parent_link + "</strong></p>\n"
+					href_tag = '<a href="' + parent_link + '">' + parent_link + '</a>'
+					header = '<p><strong>External links linked from: ' + href_tag + '</strong></p>\n'
 					file.write(header)
 					for link in self.non_target_external_links[parent_link]:
-						content = "<p>------> " + link + "</p>\n"
+						link_tag = '<a href="' + link + '">' + link + '</a>'
+						content = "<p>------> " + link_tag + "</p>\n"
 						print(content)
 						file.write(content)
 				print("Finished writing non_target_external_links")
