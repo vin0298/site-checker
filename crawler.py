@@ -115,14 +115,15 @@ class ExternalLinkScraper:
 		return False
 
 	def print_all_external_links(self):
-		print("Writing all external links found to a file named: external_links.txt")
+		filename = time.ctime().replace(" ", "_") + "_external_links.html"
+		print("Writing all external links found to a file named: % s" % filename)
 		try:
-			with open("external_links.txt", "w+") as file:
+			with open(filename, "w+") as file:
 				for parent_link, links in self.external_urls.items():
-					header = "External links linked from: " + parent_link + "\n"
+					header = "<p><strong>>External links linked from: " + parent_link + "</strong></p>\n"
 					file.write(header)
 					for link in links:
-						content = "------> " + link + "\n"
+						content = "<p>------> " + link + "</p>\n"
 						print(content)
 						file.write(content)
 				print("Finished writing the external_links")
@@ -131,24 +132,26 @@ class ExternalLinkScraper:
 
 	# TODO: Group broken links based on their errors? 404s or Timeouts to make it more descriptive
 	def print_all_broken_links(self):
-		print("Writing all broken links found to a file named: broken_links.txt ")
+		filename = time.ctime().replace(" ", "_") + "_broken_links.html"
+		print("Writing all broken links found to a file named: % s" % filename)
 		try:
-			with open("broken_links.txt", "w+") as file:
+			with open(filename, "w+") as file:
 				for link in self.broken_links:
-					file.write(link + "\n")
+					file.write("<p>" + link + "</p>\n")
 			print("Finished writing the broken_links")
 		except Exception as e:
 			print("An exception has occured: \n %s" % e)
 
 	def write_all_non_target_external_links(self):
-		print("Writing all non-target external URLs found to a file named: non_target_external.txt")
+		filename = time.ctime().replace(" ", "_") + "_non_target_external.html"
+		print("Writing all non-target external URLs found to a file named: % s" % filename)
 		try:
-			with open("non_target_external.txt", "w+") as file:
+			with open(filename, "w+") as file:
 				for parent_link in list(self.non_target_external_links):
-					header = "<p>External links linked from: " + parent_link + "\n"
+					header = "<p><strong>External links linked from: " + parent_link + "</strong></p>\n"
 					file.write(header)
 					for link in self.non_target_external_links[parent_link]:
-						content = "------> " + link + "\n"
+						content = "<p>------> " + link + "</p>\n"
 						print(content)
 						file.write(content)
 				print("Finished writing non_target_external_links")
@@ -173,7 +176,7 @@ class ExternalLinkScraper:
 					job.add_done_callback(self.post_scrape_callback)
 			except Empty:
 				print("Ran out of links to crawl!")
-				response = input('\n-------->Retry broken links?: y/n  <------------\n')
+				response = input('\n--------> Retry broken links?: y/n  <------------\n')
 				if response.lower() == 'y':
 					# Remove broken_links from processed_urls
 					self.pool.submit(self.reprocess_broken_links)
