@@ -21,8 +21,11 @@ class ExternalLinkScraper:
 		self.processed_urls = set([])
 		self.external_urls = {}
 		self.urls_to_crawl = Queue()
-		self.urls_to_crawl.put(base_url)
+		self.urls_to_crawl.put( (base_url, base_url) )
 		self.broken_links = set([])
+
+		self.info_broken_links = {}
+
 		self.target_links = target_links_list
 		self.non_target_external_links = {}
 		self.crawled_urls = set([])
@@ -72,7 +75,7 @@ class ExternalLinkScraper:
 					formatted_url = urljoin(self.root_url, formatted_url)
 					self.tried_urls.add(formatted_url)
 					if formatted_url not in self.processed_urls:
-						self.urls_to_crawl.put(formatted_url)
+						self.urls_to_crawl.put( (formatted_url, parent_url))
 						self.crawled_urls.add(formatted_url)
 				elif self.check_if_url_is_target(formatted_url):
 					print("External URL detected: %s" % url)
@@ -95,7 +98,7 @@ class ExternalLinkScraper:
 			formatted_url = self.simplify_url(img_url)
 			if not self.robot_txt_helper.can_fetch('*', formatted_url): continue
 			if img_url in self.processed_urls: continue
-			if self.check_if_url_is_target(formatted_url):
+			if self.check_if_url_is_target(formatted_url) and not formatted_url.startswith('/'):
 				print("External img URL detected: %s" % img_url)
 				print("Found from parent: %s" % parent_url)
 				self.external_urls.setdefault(parent_url, set([])).add(img_url)
@@ -108,17 +111,23 @@ class ExternalLinkScraper:
 		if result and result.status_code == 200:
 			self.parse_links(result.text, result.url)
 			self.parse_image_links(result.text, result.url)
-			print("Finished processing %s" % result.url)
+			#print("Finished processing %s" % result.url)
 
 	# TODO: need parent_url for better information to th users
-	def parse_page(self, url):
+	def parse_page(self, url, parent_url):
 		try:
 			res = requests.get(url, timeout=(10, 30))
+			#print("parsing: ", url)
+			#print("parent: ", parent_url)
 			return res
 		except requests.RequestException as req_err:
 			print("something went wrong when requesting with url: %s" % url)
 			print(req_err)
 			self.broken_links.add(url)
+
+			parent_url_set = self.info_broken_links.setdefault(url, set([]))
+			parent_url_set.add(parent_url)
+			self.info_broken_links.set(url, parent_url_set)
 			return 
 
 	def check_if_url_is_target(self, url):
@@ -142,7 +151,6 @@ class ExternalLinkScraper:
 					for link in links:
 						link_tag = '<a href="' + link + '">' + link + '</a>'
 						content = "<p>------> " + link_tag + "</p>\n"
-						print(content)
 						file.write(content)
 				print("Finished writing the external_links")
 		except Exception as e:
@@ -159,6 +167,14 @@ class ExternalLinkScraper:
 				for link in self.broken_links:
 					link_tag = '<a href="' + link + '">' + link + '</a>'
 					file.write("<p>" + link_tag + "</p>\n")
+					file.write("    <p>Found from: </p>\n")
+					parent_broken_links = self.info_broken_links.get(link)
+					for parent_link in parent_broken_links:
+						if parent_link == link: 
+							continue
+						parent_link_tag = '<a href="' + parent_link + '">' + parent_link + '</a>'
+						file.write("              <p>" + parent_link_tag + "</p>\n")
+
 			print("Finished writing the broken_links")
 		except Exception as e:
 			print("An exception has occured: \n %s" % e)
@@ -192,7 +208,6 @@ class ExternalLinkScraper:
 					for link in self.non_target_external_links[parent_link]:
 						link_tag = '<a href="' + link + '">' + link + '</a>'
 						content = "<p>------> " + link_tag + "</p>\n"
-						print(content)
 						file.write(content)
 				print("Finished writing non_target_external_links")
 		except Exception as e:
@@ -201,7 +216,7 @@ class ExternalLinkScraper:
 	def reprocess_broken_links(self):
 		for broken_link in self.broken_links:
 			self.processed_urls.remove(broken_link)
-			self.urls_to_crawl.put(broken_link)
+			self.urls_to_crawl.put((broken_link, broken_link))
 		self.broken_links = set([])
 
 	# Retry broken links
@@ -209,11 +224,15 @@ class ExternalLinkScraper:
 	def run_crawler(self):
 		while True:
 			try:
-				target_url = self.urls_to_crawl.get(timeout=30)
+				target_url_tuple = self.urls_to_crawl.get(timeout=30)
+				target_url = target_url_tuple[0]
+				parent_url = target_url_tuple[1]
+				#print("target: ", target_url)
+				#print("parent: ", parent_url)
 				if target_url not in self.processed_urls:
-					print("Processing the URL: %s" % target_url)
+					# print("Processing the URL: %s" % target_url)
 					self.processed_urls.add(target_url)
-					job = self.pool.submit(self.parse_page, target_url)
+					job = self.pool.submit(self.parse_page, target_url, parent_url)
 					job.add_done_callback(self.post_scrape_callback)
 			except Empty:
 				print("Ran out of links to crawl!")
@@ -222,9 +241,11 @@ class ExternalLinkScraper:
 				if response.lower() == 'y':
 					# Remove broken_links from processed_urls
 					print("Retrying broken links....")
+					print("# of BROKEN LINKS BEFORE: ", len(self.broken_links))
 					self.pool.submit(self.reprocess_broken_links)
 					continue
 				print("User refused to retry for broken links")
+				print("# of BROKEN LINKS BEFORE: ", len(self.broken_links))
 				self.pool.submit(self.print_all_external_links)
 				self.pool.submit(self.print_all_broken_links)
 				self.pool.submit(self.write_all_non_target_external_links)
